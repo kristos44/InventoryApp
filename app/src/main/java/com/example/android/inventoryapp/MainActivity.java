@@ -1,125 +1,91 @@
 package com.example.android.inventoryapp;
 
-import android.content.ContentValues;
+import android.app.LoaderManager;
+import android.content.ContentUris;
+import android.content.CursorLoader;
+import android.content.Intent;
+import android.content.Loader;
 import android.database.Cursor;
-import android.database.sqlite.SQLiteDatabase;
+import android.net.Uri;
 import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
-import android.widget.TextView;
-import android.widget.Toast;
+import android.view.View;
+import android.widget.AdapterView;
+import android.widget.ListView;
+import android.support.design.widget.FloatingActionButton;
 
-import com.example.android.inventoryapp.data.InventoryContract.ProductEntry;
-import com.example.android.inventoryapp.data.ProductDbHelper;
+import com.example.android.inventoryapp.data.ProductContract.ProductEntry;
 
-public class MainActivity extends AppCompatActivity {
+public class MainActivity extends AppCompatActivity implements LoaderManager.LoaderCallbacks<Cursor> {
 
-    private ProductDbHelper mDbHelper;
+    private static final int PRODUCT_LOADER = 0;
+
+    ProductCursorAdapter mCursorAdapter;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
-        mDbHelper = new ProductDbHelper(this);
+        // Setup FAB to open EditorActivity
+        FloatingActionButton fab = (FloatingActionButton) findViewById(R.id.fab);
+        fab.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+            Intent intent = new Intent(MainActivity.this, EditorActivity.class);
+            startActivity(intent);
+            }
+        });
 
-        insertProduct();
-        try {
-            Thread.sleep(3000);
-        } catch (InterruptedException e) {
-            e.printStackTrace();
-        }
-        displayDatabaseInfo();
+        mCursorAdapter = new ProductCursorAdapter(this, null, 0);
+
+        ListView productListView = (ListView) findViewById(R.id.list);
+
+        // Find and set empty view on the ListView, so that it only shows when the list has 0 items.
+        View emptyView = findViewById(R.id.empty_view);
+        productListView.setEmptyView(emptyView);
+
+        productListView.setAdapter(mCursorAdapter);
+
+        productListView.setOnItemClickListener(new AdapterView.OnItemClickListener() {
+            @Override
+            public void onItemClick(AdapterView<?> parent, View view, int position, long id) {
+            Intent intent = new Intent(MainActivity.this, EditorActivity.class);
+
+            Uri currentProductUri = ContentUris.withAppendedId(ProductEntry.CONTENT_URI, id);
+            intent.setData(currentProductUri);
+
+            startActivity(intent);
+            }
+        });
+
+        getLoaderManager().initLoader(PRODUCT_LOADER, null, this);
     }
 
-    private void insertProduct() {
-        SQLiteDatabase db = mDbHelper.getWritableDatabase();
-
-        ContentValues values = new ContentValues();
-        values.put(ProductEntry.COLUMN_PRODUCT_NAME, "Some book title");
-        values.put(ProductEntry.COLUMN_PRODUCT_PRICE, 1000);
-        values.put(ProductEntry.COLUMN_PRODUCT_QUANTITY, 5);
-        values.put(ProductEntry.COLUMN_PRODUCT_SUPPLIER_NAME, "Some test supplier");
-        values.put(ProductEntry.COLUMN_PRODUCT_SUPPLIER_PHONE, "1234567");
-
-        long newRowId = db.insert(ProductEntry.TABLE_NAME, null, values);
-
-        // Show a toast message depending on whether or not the insertion was successful
-        if (newRowId == -1) {
-            // If the row ID is -1, then there was an error with insertion.
-            Toast.makeText(this, "Error with saving product", Toast.LENGTH_SHORT).show();
-        } else {
-            // Otherwise, the insertion was successful and we can display a toast with the row ID.
-            Toast.makeText(this, "Product saved with row id: " + newRowId, Toast.LENGTH_LONG).show();
-        }
-    }
-
-    private void displayDatabaseInfo() {
-        // Create and/or open a database to read from it
-        SQLiteDatabase db = mDbHelper.getReadableDatabase();
-
+    @Override
+    public Loader<Cursor> onCreateLoader(int id, Bundle args) {
         String[] project = {
                 ProductEntry._ID,
                 ProductEntry.COLUMN_PRODUCT_NAME,
                 ProductEntry.COLUMN_PRODUCT_PRICE,
-                ProductEntry.COLUMN_PRODUCT_QUANTITY,
-                ProductEntry.COLUMN_PRODUCT_SUPPLIER_NAME,
-                ProductEntry.COLUMN_PRODUCT_SUPPLIER_PHONE
-
+                ProductEntry.COLUMN_PRODUCT_QUANTITY
         };
 
-        Cursor cursor = db.query(
-                ProductEntry.TABLE_NAME,
+        return new CursorLoader(this,
+                ProductEntry.CONTENT_URI,
                 project,
                 null,
                 null,
-                null,
-                null,
-                null
-        );
+                null);
+    }
 
-        try {
-            String toastText;
-            toastText = "Number of rows in products database table: " + cursor.getCount() + "\n\n";
-            toastText += "The pets table contains " + cursor.getCount() + " pets.\n\n";
-            toastText += ProductEntry._ID + " - " +
-                    ProductEntry.COLUMN_PRODUCT_NAME + " - " +
-                    ProductEntry.COLUMN_PRODUCT_PRICE + " - " +
-                    ProductEntry.COLUMN_PRODUCT_QUANTITY + " - " +
-                    ProductEntry.COLUMN_PRODUCT_SUPPLIER_NAME + " - " +
-                    ProductEntry.COLUMN_PRODUCT_SUPPLIER_PHONE + "\n";
+    @Override
+    public void onLoadFinished(Loader<Cursor> loader, Cursor data) {
+        mCursorAdapter.swapCursor(data);
+    }
 
-            // Figure out the index of each column
-            int idColumnIndex = cursor.getColumnIndex(ProductEntry._ID);
-            int nameColumnIndex = cursor.getColumnIndex(ProductEntry.COLUMN_PRODUCT_NAME);
-            int priceColumnIndex = cursor.getColumnIndex(ProductEntry.COLUMN_PRODUCT_PRICE);
-            int quantityColumnIndex = cursor.getColumnIndex(ProductEntry.COLUMN_PRODUCT_QUANTITY);
-            int supplierNameColumnIndex = cursor.getColumnIndex(ProductEntry.COLUMN_PRODUCT_SUPPLIER_NAME);
-            int supplierPhoneColumnIndex = cursor.getColumnIndex(ProductEntry.COLUMN_PRODUCT_SUPPLIER_PHONE);
-
-            // Iterate through all the returned rows in the cursor
-            while (cursor.moveToNext()) {
-                // Use that index to extract the String or Int value of the word
-                // at the current row the cursor is on.
-                int currentID = cursor.getInt(idColumnIndex);
-                String currentName = cursor.getString(nameColumnIndex);
-                int currentPrice = cursor.getInt(priceColumnIndex);
-                int currentQuantity = cursor.getInt(quantityColumnIndex);
-                String currentSupplierName = cursor.getString(supplierNameColumnIndex);
-                String currentSupplierPhone = cursor.getString(supplierPhoneColumnIndex);
-
-                toastText += ("\n" + currentID + " - " +
-                        currentName + " - " +
-                        currentPrice + " - " +
-                        currentQuantity + " - " +
-                        currentSupplierName + " - " +
-                        currentSupplierPhone);
-            }
-
-            Toast.makeText(this, toastText, Toast.LENGTH_LONG).show();
-        } finally {
-            // Always close the cursor when you're done reading from it. This releases all its
-            // resources and makes it invalid.
-            cursor.close();
-        }
+    @Override
+    public void onLoaderReset(Loader<Cursor> loader) {
+        mCursorAdapter.swapCursor(null);
     }
 }
